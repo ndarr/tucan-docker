@@ -17,15 +17,15 @@ def mail(recipient, subject, body):
     proc.stdin.close()
 
 
-def notify(msg):
+def notify(notification_msg):
     from subprocess import Popen
 
-    Popen(['notify-send', msg])
+    Popen(['notify-send', notification_msg])
 
 
 def parse_netrc():
-    username, _, password = netrc().authenticators("www.tucan.tu-darmstadt.de")
-    return username, password
+    netrc_username, _, netrc_password = netrc().authenticators("www.tucan.tu-darmstadt.de")
+    return netrc_username, netrc_password
 
 
 def update_db(db, grades):
@@ -62,22 +62,26 @@ if __name__ == "__main__":
 
     username, password = parse_netrc()
     grades = get_grades(username, password)
+    if len(grades[0]) > 0:
+        if args.mail or args.new or args.notify:
+            new_grades = update_db(args.db, grades)
 
-    if args.mail or args.new or args.notify:
-        new_grades = update_db(args.db, grades)
-
-        if new_grades:
-            msg = os.linesep.join([g[0] + ": " + g[2] for g in new_grades])
-            if args.mail:
-                mail(args.mail, "New Grade in TUCaN", msg)
-            elif args.notify:
-                notify(msg)
-            else:
-                print(msg)
-    else:
-        if args.json:
-            import json
-            print(json.dumps(list(grades)))
+            if new_grades:
+                msg = os.linesep.join([g[0] + ": " + g[2] for g in new_grades])
+                if args.mail:
+                    mail(args.mail, "New Grade in TUCaN", msg)
+                elif args.notify:
+                    notify(msg)
+                else:
+                    print(msg)
         else:
-            for grade in grades:
-                print(grade[0] + ": " + grade[2])
+            if args.json:
+                import json
+
+                print(json.dumps(list(grades)))
+            else:
+                for grade in grades:
+                    print(grade[0] + ": " + grade[2])
+    else:
+        msg = "No grades for the current semester"
+        print(msg)
