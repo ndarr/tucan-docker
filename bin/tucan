@@ -6,6 +6,7 @@ from netrc import netrc
 from hashlib import md5
 
 from tucan import get_grades
+import sqlite3
 
 
 def mail(recipient, subject, body):
@@ -13,7 +14,9 @@ def mail(recipient, subject, body):
 
     proc = subprocess.Popen(["mail", "-s", subject, recipient],
                             stdin=subprocess.PIPE)
+    body = body.encode('utf-8')
     proc.stdin.write(body)
+    print(body)
     proc.stdin.close()
 
 
@@ -23,27 +26,41 @@ def notify(notification_msg):
     Popen(['notify-send', notification_msg])
 
 
-def parse_netrc():
-    netrc_username, _, netrc_password = netrc().authenticators("www.tucan.tu-darmstadt.de")
-    return netrc_username, netrc_password
-
+def init_db(cursor):
+    cursor.execute("CREATE TABLE IF NOT EXISTS grades ("
+                   "   id text PRIMARY KEY,"
+                   "   subject text NOT NULL,"
+                   "   date text NOT NULL,"
+                   "   result_no text,"
+                   "   result_str text"
+                   ");")
 
 def update_db(db, grades):
-    if os.path.isfile(db):
-        with open(db) as db_fp:
-            old_digests = set(db_fp.read().split(os.linesep))
-    else:
-        old_digests = set()
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
 
-    new_digests = {md5(repr(g)).hexdigest(): g for g in grades}
+    init_db(cursor)
+    new_grades = []
+    for grade in grades:
+        cursor.execute("SELECT id, subject, date, result_no, result_str FROM grades WHERE id=?;",(grade.id,))
+        row = cursor.fetchone()
 
-    if set(new_digests.keys()) != old_digests:
-        with open(db, "w") as db_fp:
-            db_fp.write(os.linesep.join(old_digests.union(new_digests.keys())))
+        if row is None:
+            # Add grade to data base and add it to new grades
+            cursor.execute("INSERT INTO grades (id, subject, date, result_no, result_str) VALUES (?,?,?,?,?);",
+                           (grade.id, grade.subject, grade.date, grade.result_no, grade.result_str))
+            new_grades.append(grade)
 
-        return [v for k, v in new_digests.items() if k not in old_digests]
+        elif row[3] != grade.result_no:
+            # Only the result was updated, so update the database entry and add grade to new grades
+            cursor.execute("UPDATE grades SET result_no=?, result_str=? WHERE id=?;",
+                           (grade.result_no, grade.result_str, grade.id))
+            new_grades.append(grade)
 
-    return None
+    # Close DB session
+    conn.commit()
+    conn.close()
+    return new_grades
 
 
 if __name__ == "__main__":
@@ -52,24 +69,24 @@ if __name__ == "__main__":
     parser.add_argument("--mail", "-m", type=str,
                         help="send email to this address on changes")
     parser.add_argument("--db", type=str,
-                        default=os.path.expanduser("~/.tucandb"),
+                        default=os.path.expanduser("/db/.grades.db"),
                         help="database file")
     parser.add_argument("--new", help="print only new grades", action="store_true")
     parser.add_argument("--notify", "-n", action="store_true",
                         help="send desktop notification on new grades")
     parser.add_argument("--json", "-j", help="output json", action="store_true")
+    parser.add_argument("--username", "-u", help="set username")
+    parser.add_argument("--password", "-p", help="set password")
     args = parser.parse_args()
 
-    username, password = parse_netrc()
-    grades = get_grades(username, password)
-    if len(grades[0]) > 0:
-        if args.mail or args.new or args.notify:
+    grades = get_grades(args.username, args.password)
+    if len(grades) > 0:
+        if args.mail:
             new_grades = update_db(args.db, grades)
-
-            if new_grades:
-                msg = os.linesep.join([g[0] + ": " + g[2] for g in new_grades])
+            if len(new_grades) > 0:
+                msg = os.linesep.join([g.subject + ": " + g.result_no for g in new_grades])
                 if args.mail:
-                    mail(args.mail, "New Grade in TUCaN", msg)
+                    mail(args.mail, "New Grade(s) in TUCaN", msg)
                 elif args.notify:
                     notify(msg)
                 else:

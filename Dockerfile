@@ -2,10 +2,6 @@
 FROM python:2.7
 COPY . /tucan
 
-#Setup netrc config
-COPY ./.netrc /root/.netrc
-RUN chmod 400 /root/.netrc
-
 #Install python dependency
 RUN pip2 install mechanize
 RUN pip2 install lxml
@@ -23,4 +19,4 @@ COPY ./mail/ssmtp.conf /etc/ssmtp/ssmtp.conf
 COPY ./mail/revaliases /etc/ssmtp/revaliases
 
 #Exec Tucan on container execution
-CMD tucan -m username@gmail.com
+CMD tucan -m $MAIL -u $USERNAME -p $PASSWORD

@@ -8,7 +8,7 @@ setup(
     name="tucan",
     version="0.8",
     description="New Grades Notification Script for TuCaN",
-    long_description=open(path.join(path.dirname(__file__), "README.rst")).read(),
+    long_description=open(path.join(path.dirname(__file__), "README.md")).read(),
     url="http://github.com/fhirschmann/tucan",
     author="Fabian Hirschmann",
     author_email="fabian@hirschmann.email",
